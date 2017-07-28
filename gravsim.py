@@ -69,16 +69,16 @@ class game(object):
             
             # screen rendering
                # draw stuff
-               
-               # CREATOR Info
+            
+            # render bodies
+            self.gameSpace.drawFrame()
+
+            # CREATOR Info
             font = self.pg.font.Font(None,32)
             text = font.render("Velocity: "+str(vel), True, (128,0,0))
             text2 = font.render("Mass: "+str(mass),True,(128,0,0))
             self.gameSpace.screen.blit(text,(10,10))
             self.gameSpace.screen.blit(text2,(10+text.get_width(),10))
-            
-            # render bodies
-            self.gameSpace.drawFrame()
 
             # flip the buffer
             self.pg.display.flip()
@@ -158,6 +158,10 @@ class game(object):
          #this makes it obvious that key rate polling needs to be decreased,
          # or "debouncing" or something
          self.paused = not self.paused
+         if self.paused:
+            print('paused')
+         else:
+            print('unpaused')
          
       for event in pygame.event.get():
          if event.type == pygame.QUIT:
@@ -252,10 +256,11 @@ class space(game):
                if dely<0: signy = 1
                else: signy = -1
 
-               
-               if dely**2<=0.01 or dely**2>=-0.01:
+               # meant to be a divide by 0 catch but somethings very
+               # wrong here
+               if (dely**2<=0.01) or (dely**2>=-0.01):
                   dely = 0.1
-               if delx**2<=0.01 or delx**2>=-0.01:
+               if (delx**2<=0.01) or (delx**2>=-0.01):
                   delx = 0.1
                   
                F[0] = signx * self.gravconst * body.mass * otherbody.mass / delx**2
@@ -265,6 +270,9 @@ class space(game):
          v2[0] = v2[0] + accel[0]/tick
          v2[1] = v2[1] + accel[1]/tick
          body.set_vel(v2)
+         body.set_force(F)
+         # could do a body.set_accel / set_force here to give the body its
+         # own force data for drawing overlays.
                
 
    def checkCollisions():
@@ -297,39 +305,56 @@ class body(game):
       self.rad = rad
       self.vel = vel
       self.location = location
-      self.trail = [location,location]
+      self.trail = [location.copy(),location.copy()]
       self.trail_max = 100
+      self.velend = location.copy()
+      self.force = [0,0] #used to store force acting on the object in current tck
+      self.forceend = location.copy()
       
    def get_vel(self):
       return self.vel
    
    def set_vel(self,vel):
       self.vel = vel
+   
+   def set_force(self,force):
+      self.force = force
 
    def newPosition(self,tick,length,height):
       # keep location as float, only round when rendering
+      
+      # put last location onto the trail
       self.trail.append(self.location.copy())
       if len(self.trail)>self.trail_max:
          self.trail.pop(0)
+      
+      # calculate the new position
       self.location[0] += self.vel[0]*2/tick 
       self.location[1] += self.vel[1]*2/tick
       
+      # calculate the velocity vector for display
+      velvect = [0,0]
+      velvect[0] = 10*(self.location[0] - self.trail[-1][0])
+      velvect[1] = 10*(self.location[1] - self.trail[-1][1])
+      self.velend[0] = self.location[0]+velvect[0]
+      self.velend[1] = self.location[1]+velvect[1]
+      # should really make these force vectors instead, but the data for
+      # force/accel isn't stored in the body object...
+      forcevect = [0,0]
+      forcevect[0] = 30*(0-self.force[0])
+      forcevect[1] = 30*(0-self.force[1])
+      self.forceend[0] = self.location[0]+forcevect[0]
+      self.forceend[1] = self.location[1]+forcevect[1]
       
       
    def draw(self,pg,screen): #fix parameter passing with proper object inheritance
       rendCoords = (round(self.location[0]),round(self.location[1]))
-      velvect = [0,0]
-      velvect[0] = 10*(self.location[0] - self.trail[-1][0])
-      velvect[1] = 10*(self.location[1] - self.trail[-1][1])
-      velend = [0,0]
-      velend[0] = self.location[0]+velvect[0]
-      velend[1] = self.location[1]+velvect[1]
-      # should really make these force vectors instead, but the data for
-      # force/accel isn't stored in the body object...
+
       
       me = [pg.draw.circle(screen, (32, 255, 64), rendCoords,self.rad),
             pg.draw.lines(screen, (64,64,64), False, self.trail),
-            pg.draw.line(screen, (255, 0, 0),self.location,velend)]
+            pg.draw.line(screen, (255, 0, 0),self.location,self.velend),
+            pg.draw.line(screen, (0, 0, 255), self.location, self.forceend)]
       return me
       
 
