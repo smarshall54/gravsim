@@ -5,14 +5,31 @@ import numpy as np
 # 1. infinite plane instead of modulo space
 # 2. functionalize game loop
 # 3. convert to vector math using numpy
-#     a. better algo for force solving! (quadratic now) 
+#     a. better algo for force solving! (quadratic now - could use
+#        a matrix operation for much faster results
 # 4. fix object inheritance
 # 5. UI around edge of screen
-# 6. fix position and velocity updates to maintain precision;
-#     only round() on the render
-#
-#
-#
+# 6. DEBUG FEATURES:
+#     a. PAUSE (able to report during pause)
+#     b. toggle accel/vel vector drawing
+#     c. reset veladd/mass vectors to 0
+#     d. debug screen overlay
+#           - cycle thru bodies and show instantaneous vel/accel/pos of each
+#           - display game tick number %10000 so user can see how much time since last pause
+#           - calculate vector deltas since last pause
+# 7. graphical effects
+#     a. add grid
+#     b. add toggle for particle trails
+#     c. make radius proportional to mass
+#     d. toggle for color change on velocity
+# 8. EFFICIENCY
+#     a. only draw objects that are on screen
+#     b. re=code using numpy for vector math
+#     c. decouple game ticks and FPS - render as fast as possible (with bound t1)
+#           but only tick game once every t2
+#     d. reduce processor usage - probably related to gametick implementation.
+#           this small game should not use a full core unless there are many bodies.
+#           figure out why and stop it.
 
 
 class game(object):
@@ -73,11 +90,9 @@ class game(object):
             dirkeys = (up_key, down_key, left_key, right_key)
             
             if w_key:
-               mass += 0.05
-               mass %= 100
+               mass = round((mass + 1))%100
             if s_key:
-               mass -= 0.05
-               mass %= 100
+               mass = round((mass - 1))%100
                
             for event in pygame.event.get():
                if event.type == pygame.QUIT:
@@ -100,8 +115,8 @@ class game(object):
                      self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]])
                      
             # wrap the screen
-            y = y%self.gameSpace.height
-            x = x%self.gameSpace.length
+#            y = y%self.gameSpace.height
+#            x = x%self.gameSpace.length
             
             # screen rendering
                # draw stuff
@@ -179,29 +194,17 @@ class space(game):
          accel = [0,0]
          for otherbody in self.bodies:
             if otherbody!=body:
-               #edit this to handle modulo'd space
-               delx = body.location[0] - otherbody.location[0]
-               dely = body.location[1] - otherbody.location[1]
-               # this still doesnt quite work; there is an edge effect
-               # for proper sim, probably best NOT to wrap the world; 
-               # it is enforcing a "spherical" space onto a cartesian plot
-               # which is always going to have edge effects.
-               # instead allow an infinite plane outside of the screen bounds
-               # and only draw stuff that's on screen.
-               r = (delx**2 + dely**2)**0.5
+               delx = otherbody.location[0] - body.location[0]
+               dely = otherbody.location[1] - body.location[1]
                
-#               if delx<0:  signx = -1
-#               else: signx = 1
-#                  
-#               if dely<0: signy = -1
-#               else: signy = 1
-               signx=1
-               signy=1
-               
-               delx = min(abs(body.location[0] - otherbody.location[0]),
-                          abs(otherbody.location[0]-body.location[0]))
-               dely = min(abs(body.location[1] - otherbody.location[1]),
-                          abs(otherbody.location[1]-body.location[1]))
+               # must determine sign because the information is lost 
+               # by the r^2 part of the gravity equation.
+               if delx<0:  signx = 1
+               else: signx = -1
+                  
+               if dely<0: signy = 1
+               else: signy = -1
+
                
                if dely**2<=0.01 or dely**2>=-0.01:
                   dely = 0.1
@@ -257,8 +260,6 @@ class body(game):
       # keep location as float, only round when rendering
       self.location[0] += self.vel[0]*2/tick 
       self.location[1] += self.vel[1]*2/tick 
-      self.location[0] %= length
-      self.location[1] %= height
       
    def draw(self,pg,screen): #fix parameter passing with proper object inheritance
       rendCoords = (round(self.location[0]),round(self.location[1]))
