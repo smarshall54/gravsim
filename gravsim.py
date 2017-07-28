@@ -43,97 +43,144 @@ class game(object):
       self.winsizex = 1280
       self.winsizey = 720
       self.pg.init()
+      self.paused = False
 
    def gameLoop(self):
-      done = False
+      running = True
       # gameticks
       clock = self.pg.time.Clock()
-      # initial position:
-      x=30
-      y=30
+      
+      
+      # should create a "body creator" function which has these...)
       vel = [0,0] # initial velocity adder for new bodies
       veladd = [0,0]
-      mass = 1
+      mass = 1      
+      creator_settings = [vel, veladd, mass]
+
+      
       try:      
-         while not done:
+         while running:
             clock.tick(self.ftick)
             # inputs
-            pressed = self.pg.key.get_pressed()
-            up_key = pressed[self.pg.K_UP]
-            down_key = pressed[self.pg.K_DOWN]
-            left_key = pressed[self.pg.K_LEFT]
-            right_key = pressed[self.pg.K_RIGHT]
-            w_key = pressed[self.pg.K_w]
-            s_key = pressed[self.pg.K_s]
             
-            if up_key: 
-               veladd[1]+=0.05 
-               veladd[1]%=20
-               vel[1] = round(10-veladd[1],2)
-               print(dirkeys)
-            if down_key: 
-               veladd[1]-=0.05 
-               veladd[1]%=20
-               vel[1] = round(10-veladd[1],2)
-               print(dirkeys)
-            if left_key: 
-               veladd[0]-=0.05 
-               veladd[0]%=20
-               vel[0] = round(10-veladd[0],2)
-               print(dirkeys)
-            if right_key: 
-               veladd[0]+=0.05 
-               veladd[0]%=20
-               vel[0] = round(10-veladd[0],2)
-               print(dirkeys)
-            
-            dirkeys = (up_key, down_key, left_key, right_key)
-            
-            if w_key:
-               mass = round((mass + 1))%100
-            if s_key:
-               mass = round((mass - 1))%100
-               
-            for event in pygame.event.get():
-               if event.type == pygame.QUIT:
-                  done = True
-                  self.pg.quit()
-                  break
-               if event.type == self.pg.KEYDOWN and event.key == self.pg.K_ESCAPE:
-                  done = True
-                  self.pg.quit()
-                  break
-               
-               if event.type == self.pg.KEYDOWN and event.key == self.pg.K_c:
-                  self.gameSpace.bodies = []
-               if event.type == self.pg.KEYDOWN and event.key == self.pg.K_r:
-                  self.gameSpace.reportBodies()
-               # on Lclick, add a body to the space
-               if event.type==pygame.MOUSEBUTTONDOWN: 
-                  if event.button==1:
-                     mouseloc = self.pg.mouse.get_pos()
-                     self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]])
-                     
-            # wrap the screen
-#            y = y%self.gameSpace.height
-#            x = x%self.gameSpace.length
+            creator_settings = self.handleInputs(creator_settings)
+            vel = creator_settings[0]
+            mass = creator_settings[2]
             
             # screen rendering
                # draw stuff
+               
+               # CREATOR Info
             font = self.pg.font.Font(None,32)
             text = font.render("Velocity: "+str(vel), True, (128,0,0))
             text2 = font.render("Mass: "+str(mass),True,(128,0,0))
-            
-            self.gameSpace.drawFrame()
             self.gameSpace.screen.blit(text,(10,10))
             self.gameSpace.screen.blit(text2,(10+text.get_width(),10))
+            
+            # render bodies
+            self.gameSpace.drawFrame()
+
             # flip the buffer
             self.pg.display.flip()
             
-            self.gameSpace.updatePositions(self.ftick)
-            self.gameSpace.updateVels(self.ftick)
+            
+            if not self.paused:
+               self.gameSpace.updatePositions(self.ftick)
+               self.gameSpace.updateVels(self.ftick)
       finally:
          pygame.quit()
+         
+   def handleInputs(self,creator_settings):
+      """
+      function which polls the keyboard for keys pressed and checks the event stack
+      
+      performs functions based on what keys are pressed.
+      
+      in the future, should reference a keybinding which maps keys to functions
+      actions should also become separate functions
+      """
+      pressed = self.pg.key.get_pressed()
+      up_key = pressed[self.pg.K_UP]
+      down_key = pressed[self.pg.K_DOWN]
+      left_key = pressed[self.pg.K_LEFT]
+      right_key = pressed[self.pg.K_RIGHT]
+      w_key = pressed[self.pg.K_w]
+      s_key = pressed[self.pg.K_s] # these variables are kind of redundant
+                                    # since self.pg.K_w is pretty self-documenting
+      dirkeys = (up_key, down_key, left_key, right_key)
+      
+      vel = creator_settings[0]
+      veladd = creator_settings[1]
+      mass = creator_settings[2]
+      
+      
+      # CREATOR: increase/decrease initial velocity
+      if up_key: 
+         veladd[1]+=0.05 
+         veladd[1]%=20
+         vel[1] = round(10-veladd[1],2)
+         print(dirkeys)
+      if down_key: 
+         veladd[1]-=0.05 
+         veladd[1]%=20
+         vel[1] = round(10-veladd[1],2)
+         print(dirkeys)
+      if left_key: 
+         veladd[0]-=0.05 
+         veladd[0]%=20
+         vel[0] = round(10-veladd[0],2)
+         print(dirkeys)
+      if right_key: 
+         veladd[0]+=0.05 
+         veladd[0]%=20
+         vel[0] = round(10-veladd[0],2)
+         print(dirkeys)
+      
+      # CREATOR: increase/decrease mass
+      if w_key:
+         mass = (round(mass + 1)%99)+1
+         print('increasing mass to',mass)
+      if s_key:
+         if mass==1:
+            mass = round(mass - 2)%100 # for some reason this doesnt work when %99+1
+         mass = round(mass - 1)%100                              # it just doesnt change the mass value
+         print('reducing mass to',mass)
+         if mass==0:
+            mass = 1
+         
+      # CREATOR: RESET creator settings
+      if pressed[self.pg.K_f]:
+         mass = 1
+         vel = [0,0]
+         
+      # PHYSICS SIM PAUSE
+      if pressed[self.pg.K_p]:
+         #this makes it obvious that key rate polling needs to be decreased,
+         # or "debouncing" or something
+         self.paused = not self.paused
+         
+      for event in pygame.event.get():
+         if event.type == pygame.QUIT:
+            done = True
+            self.pg.quit()
+            break
+         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_ESCAPE:
+            done = True
+            self.pg.quit()
+            break
+         
+         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_c:
+            self.gameSpace.bodies = []
+         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_r:
+            self.gameSpace.reportBodies()
+         # on Lclick, add a body to the space
+         if event.type==pygame.MOUSEBUTTONDOWN: 
+            if event.button==1:
+               mouseloc = self.pg.mouse.get_pos()
+               self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]])
+               
+      creator_settings = [vel, veladd, mass]
+      return creator_settings
 
 class space(game):
    """
@@ -158,7 +205,7 @@ class space(game):
       """
       adds a body to the space
       """
-      newBody = body(mass,5,vel,location)
+      newBody = body(mass,5+mass//5,vel,location) # radius ~ mass//5
       self.bodies.append(newBody)
 
    def updatePositions(self,tick):
@@ -177,9 +224,9 @@ class space(game):
          ### HOW TO DO PROPER OO REFERENCING OF PARENT CLASS?
       self.screen.fill((0,0,0))  
       for body in self.bodies:
-         body.draw(self.pg,self.screen)   # could definitely fix all this
-                                       # parameter passing with proper
-                                       # object inheritance.
+         drawlist = body.draw(self.pg,self.screen)   # could definitely fix all this
+         for d in drawlist:                          # parameter passing with proper
+            d                        # object inheritance.
                                        # space() and body() should inherit
                                        # pygame and screen objects from game()
                                        # object
@@ -237,6 +284,7 @@ class space(game):
       for body in self.bodies:
          print(body.vel,"velocity")
          print(body.location,"location")
+         print(body.trail,"trail")
 
 class body(game):
    """
@@ -249,6 +297,8 @@ class body(game):
       self.rad = rad
       self.vel = vel
       self.location = location
+      self.trail = [location,location]
+      self.trail_max = 100
       
    def get_vel(self):
       return self.vel
@@ -258,12 +308,28 @@ class body(game):
 
    def newPosition(self,tick,length,height):
       # keep location as float, only round when rendering
+      self.trail.append(self.location.copy())
+      if len(self.trail)>self.trail_max:
+         self.trail.pop(0)
       self.location[0] += self.vel[0]*2/tick 
-      self.location[1] += self.vel[1]*2/tick 
+      self.location[1] += self.vel[1]*2/tick
+      
+      
       
    def draw(self,pg,screen): #fix parameter passing with proper object inheritance
       rendCoords = (round(self.location[0]),round(self.location[1]))
-      me = pg.draw.circle(screen, (32, 255, 64), rendCoords,self.rad)
+      velvect = [0,0]
+      velvect[0] = 10*(self.location[0] - self.trail[-1][0])
+      velvect[1] = 10*(self.location[1] - self.trail[-1][1])
+      velend = [0,0]
+      velend[0] = self.location[0]+velvect[0]
+      velend[1] = self.location[1]+velvect[1]
+      # should really make these force vectors instead, but the data for
+      # force/accel isn't stored in the body object...
+      
+      me = [pg.draw.circle(screen, (32, 255, 64), rendCoords,self.rad),
+            pg.draw.lines(screen, (64,64,64), False, self.trail),
+            pg.draw.line(screen, (255, 0, 0),self.location,velend)]
       return me
       
 
