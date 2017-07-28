@@ -1,6 +1,20 @@
 import pygame
 import numpy as np
 
+#  TODO:
+# 1. infinite plane instead of modulo space
+# 2. functionalize game loop
+# 3. convert to vector math using numpy
+#     a. better algo for force solving! (quadratic now) 
+# 4. fix object inheritance
+# 5. UI around edge of screen
+# 6. fix position and velocity updates to maintain precision;
+#     only round() on the render
+#
+#
+#
+
+
 class game(object):
    """
    contains data about the game session
@@ -22,6 +36,7 @@ class game(object):
       y=30
       vel = [0,0] # initial velocity adder for new bodies
       veladd = [0,0]
+      mass = 1
       try:      
          while not done:
             clock.tick(self.ftick)
@@ -31,30 +46,39 @@ class game(object):
             down_key = pressed[self.pg.K_DOWN]
             left_key = pressed[self.pg.K_LEFT]
             right_key = pressed[self.pg.K_RIGHT]
+            w_key = pressed[self.pg.K_w]
+            s_key = pressed[self.pg.K_s]
             
             if up_key: 
-               veladd[0]+=0.05 
-               veladd[0]%=20
-               vel[0] = round(veladd[0]-10,2)
-               print(dirkeys)
-            if down_key: 
-               veladd[0]-=0.05 
-               veladd[0]%=20
-               vel[0] = round(veladd[0]-10,2)
-               print(dirkeys)
-            if left_key: 
-               veladd[1]-=0.05 
-               veladd[1]%=20
-               vel[1] = round(veladd[1]-10,2)
-               print(dirkeys)
-            if right_key: 
                veladd[1]+=0.05 
                veladd[1]%=20
-               vel[1] = round(veladd[1]-10,2)
+               vel[1] = round(10-veladd[1],2)
+               print(dirkeys)
+            if down_key: 
+               veladd[1]-=0.05 
+               veladd[1]%=20
+               vel[1] = round(10-veladd[1],2)
+               print(dirkeys)
+            if left_key: 
+               veladd[0]-=0.05 
+               veladd[0]%=20
+               vel[0] = round(10-veladd[0],2)
+               print(dirkeys)
+            if right_key: 
+               veladd[0]+=0.05 
+               veladd[0]%=20
+               vel[0] = round(10-veladd[0],2)
                print(dirkeys)
             
             dirkeys = (up_key, down_key, left_key, right_key)
             
+            if w_key:
+               mass += 0.05
+               mass %= 100
+            if s_key:
+               mass -= 0.05
+               mass %= 100
+               
             for event in pygame.event.get():
                if event.type == pygame.QUIT:
                   done = True
@@ -73,8 +97,8 @@ class game(object):
                if event.type==pygame.MOUSEBUTTONDOWN: 
                   if event.button==1:
                      mouseloc = self.pg.mouse.get_pos()
-                     self.gameSpace.addBody(vel.copy(), [mouseloc[0],mouseloc[1]])
-
+                     self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]])
+                     
             # wrap the screen
             y = y%self.gameSpace.height
             x = x%self.gameSpace.length
@@ -83,13 +107,16 @@ class game(object):
                # draw stuff
             font = self.pg.font.Font(None,32)
             text = font.render("Velocity: "+str(vel), True, (128,0,0))
+            text2 = font.render("Mass: "+str(mass),True,(128,0,0))
             
             self.gameSpace.drawFrame()
             self.gameSpace.screen.blit(text,(10,10))
+            self.gameSpace.screen.blit(text2,(10+text.get_width(),10))
             # flip the buffer
             self.pg.display.flip()
             
             self.gameSpace.updatePositions(self.ftick)
+            self.gameSpace.updateVels(self.ftick)
       finally:
          pygame.quit()
 
@@ -108,14 +135,15 @@ class space(game):
       self.tick = 1         #sets time granularity to 1x the game loop tick
       self.pg = pg
       self.screen = pg.display.set_mode((self.length+50, self.height+50))
+      self.gravconst = 0.01
 
       self.bodies = []
 
-   def addBody(self, vel=[0,0], location=[0,0]):
+   def addBody(self, mass, vel=[0,0], location=[0,0]):
       """
       adds a body to the space
       """
-      newBody = body(1,5,vel,location)
+      newBody = body(mass,5,vel,location)
       self.bodies.append(newBody)
 
    def updatePositions(self,tick):
@@ -140,7 +168,54 @@ class space(game):
                                        # space() and body() should inherit
                                        # pygame and screen objects from game()
                                        # object
-      pass
+   def updateVels(self,tick):
+      # F/m = a
+      # F = gm1m2/r2
+      # v = a*dt
+      for body in self.bodies:
+         v1 = body.get_vel()
+         v2 = v1.copy()
+         F = [0,0]
+         accel = [0,0]
+         for otherbody in self.bodies:
+            if otherbody!=body:
+               #edit this to handle modulo'd space
+               delx = body.location[0] - otherbody.location[0]
+               dely = body.location[1] - otherbody.location[1]
+               # this still doesnt quite work; there is an edge effect
+               # for proper sim, probably best NOT to wrap the world; 
+               # it is enforcing a "spherical" space onto a cartesian plot
+               # which is always going to have edge effects.
+               # instead allow an infinite plane outside of the screen bounds
+               # and only draw stuff that's on screen.
+               r = (delx**2 + dely**2)**0.5
+               
+#               if delx<0:  signx = -1
+#               else: signx = 1
+#                  
+#               if dely<0: signy = -1
+#               else: signy = 1
+               signx=1
+               signy=1
+               
+               delx = min(abs(body.location[0] - otherbody.location[0]),
+                          abs(otherbody.location[0]-body.location[0]))
+               dely = min(abs(body.location[1] - otherbody.location[1]),
+                          abs(otherbody.location[1]-body.location[1]))
+               
+               if dely**2<=0.01 or dely**2>=-0.01:
+                  dely = 0.1
+               if delx**2<=0.01 or delx**2>=-0.01:
+                  delx = 0.1
+                  
+               F[0] = signx * self.gravconst * body.mass * otherbody.mass / delx**2
+               F[1] = signy * self.gravconst * body.mass * otherbody.mass / dely**2
+               accel[0] -= F[0]/body.mass
+               accel[1] -= F[1]/body.mass
+         v2[0] = v2[0] + accel[0]/tick
+         v2[1] = v2[1] + accel[1]/tick
+         body.set_vel(v2)
+               
 
    def checkCollisions():
       """
@@ -171,15 +246,23 @@ class body(game):
       self.rad = rad
       self.vel = vel
       self.location = location
+      
+   def get_vel(self):
+      return self.vel
+   
+   def set_vel(self,vel):
+      self.vel = vel
 
    def newPosition(self,tick,length,height):
-      self.location[0] += round(self.vel[0]*2/tick)
-      self.location[1] += round(self.vel[1]*2/tick)
+      # keep location as float, only round when rendering
+      self.location[0] += self.vel[0]*2/tick 
+      self.location[1] += self.vel[1]*2/tick 
       self.location[0] %= length
       self.location[1] %= height
       
    def draw(self,pg,screen): #fix parameter passing with proper object inheritance
-      me = pg.draw.circle(screen, (32, 255, 64), (self.location[0],self.location[1]),self.rad)
+      rendCoords = (round(self.location[0]),round(self.location[1]))
+      me = pg.draw.circle(screen, (32, 255, 64), rendCoords,self.rad)
       return me
       
 
