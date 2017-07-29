@@ -1,14 +1,17 @@
 import pygame
 import numpy as np
 
-#  TODO:
-# X   1. infinite plane instead of modulo space
-# 2. functionalize game loop
+#  TODO
+# 1. Move all physics update logic to body() objects instead of space
+#     space object should only be used for counting bodies and holding data
+#        about space, like grid, color, size etc.
+# 2. add order of magnitude mass controls (a, d) for more interesting sims
 # 3. convert to vector math using numpy
 #     a. better algo for force solving! (quadratic now - could use
 #        a matrix operation for much faster results
-# 4. fix object inheritance
-# 5. UI around edge of screen
+# P 4. fix object inheritance
+#        really should decide how to do rendering, whether to pass screens around...
+# P 5. UI around edge of screen
 # 6. DEBUG FEATURES:
 # X    a. PAUSE (able to report during pause)
 # P    b. toggle accel/vel vector drawing
@@ -47,7 +50,7 @@ class game(object):
       self.pg.init()
       self.screen = self.pg.display.set_mode((self.winsizex, self.winsizey))
       # set up game objects
-      self.gameSpace = space(self.pg)
+      self.gameSpace = space(self.pg,self.screen)
       self.creator = creator(self.pg)
 
    def toggle_pause(self):
@@ -56,6 +59,8 @@ class game(object):
       else: print("Unpaused")
 
    def gameLoop(self):
+      
+      #DEBUG TEST: a=inherit()
       running = True
       # gameticks
       clock = self.pg.time.Clock() 
@@ -83,18 +88,28 @@ class game(object):
          pygame.quit()
          
    def drawAll(self):
+      
+      self.screen.fill((0,0,0)) 
       # space draws entities
       # really should be, get render data from space and draw it
-      self.gameSpace.drawFrame()
+      for d in self.gameSpace.drawFrame():
+         for key in d:
+            if key=='body':
+               self.pg.draw.circle(self.screen, d[key][0], d[key][1],d[key][2])
+            if key=='trail':
+               self.pg.draw.lines(self.screen, d[key][0], d[key][1],d[key][2])
+            if key=='velvect':
+               self.pg.draw.line(self.screen, d[key][0], d[key][1],d[key][2])
+            if key=='forcevect':
+               self.pg.draw.line(self.screen, d[key][0], d[key][1],d[key][2])
       # define menu area for creator status
-      self.pg.draw.rect(self.gameSpace.screen, (96,96,96), self.pg.Rect(0,self.gameSpace.height,self.gameSpace.length,40))
+      self.pg.draw.rect(self.screen, (96,96,96), self.pg.Rect(0,self.winsizey-50,self.winsizex,40))
       # take render data from Creator and draw that
       self.creator.drawGenBar()
       twidth = 10
       for t in self.creator.textitems:
-         self.gameSpace.screen.blit(t,(twidth,self.gameSpace.height))
-         twidth+=(10+t.get_width())
-      
+         self.screen.blit(t,(twidth,self.winsizey-50))
+         twidth+=(10+t.get_width())     
       self.pg.display.flip()
 
    def handleInputs(self):
@@ -108,7 +123,7 @@ class game(object):
       if pressed[self.pg.K_LEFT]:   self.creator.update_vel(0,-0.05)
       if pressed[self.pg.K_RIGHT]:  self.creator.update_vel(0,0.05)
       if pressed[self.pg.K_w]:      self.creator.update_mass(1)
-      if pressed[self.pg.K_s]:      self.creator.update_mass(1)
+      if pressed[self.pg.K_s]:      self.creator.update_mass(-1)
       if pressed[self.pg.K_f]:      self.creator.reset_params()
       
       # Manage Event Stack
@@ -120,6 +135,8 @@ class game(object):
             if event.key == self.pg.K_r:  self.gameSpace.reportBodies()
             if event.key == self.pg.K_p:  self.toggle_pause()
             if event.key == self.pg.K_e:  self.creator.toggle_mobile()
+            if event.key == self.pg.K_a:  self.creator.update_order(-1)
+            if event.key == self.pg.K_d:  self.creator.update_order(1)
          # on Lclick, add a body to the space
          if event.type==pygame.MOUSEBUTTONDOWN: 
             if event.button==1:
@@ -127,7 +144,10 @@ class game(object):
                ## CALL CREATOR CLASS for createBody()
                self.gameSpace.addBody(self.creator.mass, self.creator.vel.copy(), [mouseloc[0],mouseloc[1]],self.creator.mobile)
                print('mouse clicked at',mouseloc)
-
+class inherit(game):
+   def __init__(self):
+      game.__init__(self)
+      print(self.screen)
 class creator(game):
    def __init__(self,pg):
       # pygame object (shouldn't need once set up right)
@@ -136,6 +156,7 @@ class creator(game):
       self.vel = [0,0]
       self.veladd = [0,0]
       self.mass = 1
+      self.order = 1
       self.mobile = True
       # render data
       self.textitems = () # creator settings text to render
@@ -145,7 +166,9 @@ class creator(game):
          self.veladd[ind]%=2
          self.vel[ind] = round(1-self.veladd[ind],2)
    def update_mass(self,incr):
-      self.mass = (round(self.mass + incr)%99)+1
+      self.mass = (round(self.mass + incr)%(99*10**self.order)+1*10**self.order)
+   def update_order(self,incr):
+      self.order += incr
    def toggle_mobile(self):
       self.mobile = not self.mobile
    def reset_params(self):
@@ -153,6 +176,10 @@ class creator(game):
       self.vel = [0,0]
    
    def drawGenBar(self):
+      """
+      generates text renders and other graphical objects to be passed
+      up to the main render method for drawing to the screen.
+      """
       font = self.pg.font.Font(None,28)
       text = font.render("Velocity: "+str(self.vel), True, (128,0,0))
       text2 = font.render("Mass: "+str(self.mass),True,(128,0,0))
@@ -167,15 +194,15 @@ class space(game):
    bodies in the space, as well as parameters defining
    the space itself; such as size, boundaries etc.
    """
-   def __init__(self, pg, length=800, height=600, wrap=True):
-      self.length = length
-      self.height = height
-      self.wrap = wrap
-      self.grid = 1          #sets space granularity to 1 pixel
-      self.tick = 1         #sets time granularity to 1x the game loop tick
+   def __init__(self, pg, screen):
+
+      self.grid = 1           #sets space granularity to 1 pixel
+      self.tick = 1           #sets time granularity to 1x the game loop tick
       self.pg = pg
-      self.screen = pg.display.set_mode((self.length+50, self.height+50))
-      #game.__init__(self)
+      self.screen = screen #not sure how to get this via inheritance
+      print("space inherits",self.screen)
+      self.width = self.screen.get_width()    # valid render area
+      self.height = self.screen.get_height()    # valid render area
       self.gravconst = 100
       self.bodies = []
       
@@ -183,7 +210,8 @@ class space(game):
       """
       adds a body to the space
       """
-      newBody = body(mass,5+mass//5,vel,location,mobile) # radius ~ mass//5
+      # gotta fix this function too, needs to get data from Creator
+      newBody = body(mass,5+mass//50,vel,location,mobile) # radius ~ mass//5
       self.bodies.append(newBody)
 
    def updatePositions(self,tick):
@@ -191,25 +219,19 @@ class space(game):
       calculate new positions for the next frame
       """
       for body in self.bodies:
-         loc = body.newPosition(self.tick,self.length, self.height)
+         loc = body.newPosition(self.tick)
          if (loc[0]**2+loc[1]**2)**0.5 > 20000:
             self.bodies.remove(body)
             print('removed body - too far away')
    def drawFrame(self):
       """
-      draws the space for the next frame
+      goes through self.bodies and gets drawing data for each body
       """
-      # erase previous screen
-         ### THIS REFERENCE IS BROKE, HACKED TOGETHER
-         ### HOW TO DO PROPER OO REFERENCING OF PARENT CLASS?
-      self.screen.fill((0,0,0))  
+      drawlist = []
       for body in self.bodies:
-         drawlist = body.draw(self.pg,self.screen)   # could definitely fix all this
-         for d in drawlist:                          # parameter passing with proper
-            d                        # object inheritance.
-                                       # space() and body() should inherit
-                                       # pygame and screen objects from game()
-                                       # object
+         drawlist.append(body.getDrawData())   # could definitely fix all this
+      return drawlist
+
    def updateVels(self,tick):
       # F/m = a
       # F = gm1m2/r2
@@ -225,13 +247,11 @@ class space(game):
                dely = otherbody.location[1] - body.location[1]
                r2 = (delx**2+dely**2)
                Ftot = self.gravconst*body.mass*otherbody.mass/r2
-
-               
                # div by 0 catch since no collision
-               if (dely<=1 and dely>0) or (dely>=-1 and dely<=0):
-                  dely = 1
-               if (delx<=1 and delx>0) or (delx>=-1 and delx<=0):
-                  delx = 1
+               if (dely<=1 and dely>0):   dely = 1
+               if (dely>=-1 and dely<=0): dely = -1
+               if (delx<=1 and delx>0):   delx = 1
+               if (delx>=-1 and delx<=0): delx = -1
                F[0] += Ftot*(delx/(r2**0.5))
                F[1] += Ftot*(dely/(r2**0.5))
                accel[0] = F[0]/body.mass
@@ -239,10 +259,7 @@ class space(game):
          v2[0] = v2[0] + accel[0]/tick
          v2[1] = v2[1] + accel[1]/tick
          body.set_vel(v2)
-         body.set_force(F)
-         # could do a body.set_accel / set_force here to give the body its
-         # own force data for drawing overlays.
-               
+         body.set_force(F)               
 
    def checkCollisions():
       """
@@ -256,6 +273,7 @@ class space(game):
       for each body.
       """
       pass
+   
    def reportBodies(self):
       print(len(self.bodies),"bodies exist")
       for body in self.bodies:
@@ -293,7 +311,7 @@ class body(game):
    def set_force(self,force):
       self.force = force
 
-   def newPosition(self,tick,length,height):
+   def newPosition(self,tick):
       # keep location as float, only round when rendering
       
       # put last location onto the trail
@@ -322,15 +340,27 @@ class body(game):
       return self.location
       
       
-   def draw(self,pg,screen): #fix parameter passing with proper object inheritance
+   def getDrawData(self): #fix parameter passing with proper object inheritance
+      """
+      returns a dict containing tuples of the arguments to be passed
+      to various pygame.draw methods, such as pygame.draw.circle, .lines, .line
+      The tuple can be unpacked as the arguments in the main rendering method,
+      which is the only class that knows what Screen to draw to.
+      """
+      bodycolor = (32,255,64)
+      trailcolor = (64,64,64)
+      velvectcolor = (255,0,0)
+      forcevectcolor = (0,0,255)
+   
       rendCoords = (round(self.location[0]),round(self.location[1]))
-
-      
-      me = [pg.draw.circle(screen, (32, 255, 64), rendCoords,self.rad),
-            pg.draw.lines(screen, (64,64,64), False, self.trail),
-            pg.draw.line(screen, (255, 0, 0),self.location,self.velend),
-            pg.draw.line(screen, (0, 0, 255), self.location, self.forceend)]
-      return me
+      print(rendCoords,self.rad)
+      drawdata = {'body':(bodycolor,rendCoords,self.rad),
+                  'trail':(trailcolor,False,self.trail),
+                  'velvect':(velvectcolor,self.location,self.velend),
+                  'forcevect':(forcevectcolor,self.location,self.forceend)}
+      #not sure how to get rid of direct draw calls here without just piping ALL of the 
+      # data back up. but it works.
+      return drawdata
       
 
 def main():
