@@ -37,161 +37,129 @@ class game(object):
    contains data about the game session
    """
    def __init__(self):
+      #main game window parameters
       self.ftick = 60
-      self.pg = pygame
-      self.gameSpace = space(self.pg)
       self.winsizex = 1280
       self.winsizey = 720
-      self.pg.init()
       self.paused = False
-      self.mobile = True # CREATOR param
+      # set up pygame object
+      self.pg = pygame
+      self.pg.init()
+      self.screen = self.pg.display.set_mode((self.winsizex, self.winsizey))
+      # set up game objects
+      self.gameSpace = space(self.pg)
+      self.creator = creator(self.pg)
+
+   def toggle_pause(self):
+      self.paused = not self.paused
+      if self.paused:   print("Paused")
+      else: print("Unpaused")
 
    def gameLoop(self):
       running = True
       # gameticks
-      clock = self.pg.time.Clock()
-      
-      
-      # should create a "body creator" function which has these...)
-      vel = [0,0] # initial velocity adder for new bodies
-      veladd = [0,0]
-      mass = 1      
-      creator_settings = [vel, veladd, mass]
-
-      
+      clock = self.pg.time.Clock() 
       try:      
          while running:
+            # GAME TICKS / FPS
+            ###################
             clock.tick(self.ftick)
-            # inputs
             
-            creator_settings = self.handleInputs(creator_settings)
-            vel = creator_settings[0]
-            mass = creator_settings[2]
-            
-            # screen rendering
-               # draw stuff
-            
-            # render bodies
-            self.gameSpace.drawFrame()
-
-            # CREATOR Info
-            font = self.pg.font.Font(None,32)
-            text = font.render("Velocity: "+str(vel), True, (128,0,0))
-            text2 = font.render("Mass: "+str(mass),True,(128,0,0))
-            text3 = font.render("Mobile:"+str(self.mobile),True,(128,0,0))
-            self.gameSpace.screen.blit(text,(10,10))
-            self.gameSpace.screen.blit(text2,(10+text.get_width(),10))
-            self.gameSpace.screen.blit(text3,(10+text.get_width()+10+text2.get_width(),10))
-            # flip the buffer
-            self.pg.display.flip()
-            
-            
+            # UPDATE GAME
+            ######################            
             if not self.paused:
                self.gameSpace.updatePositions(self.ftick)
                self.gameSpace.updateVels(self.ftick)
+
+            # INPUT/EVENT HANDLING
+            #######################
+            self.handleInputs()
+            
+            # RENDER
+            #################
+            self.drawAll()
+            
       finally:
          pygame.quit()
          
-   def handleInputs(self,creator_settings):
+   def drawAll(self):
+      # space draws entities
+      # really should be, get render data from space and draw it
+      self.gameSpace.drawFrame()
+      # define menu area for creator status
+      self.pg.draw.rect(self.gameSpace.screen, (96,96,96), self.pg.Rect(0,self.gameSpace.height,self.gameSpace.length,40))
+      # take render data from Creator and draw that
+      self.creator.drawGenBar()
+      twidth = 10
+      for t in self.creator.textitems:
+         self.gameSpace.screen.blit(t,(twidth,self.gameSpace.height))
+         twidth+=(10+t.get_width())
+      
+      self.pg.display.flip()
+
+   def handleInputs(self):
       """
-      function which polls the keyboard for keys pressed and checks the event stack
-      
-      performs functions based on what keys are pressed.
-      
-      in the future, should reference a keybinding which maps keys to functions
-      actions should also become separate functions
+      checks for user input and manages the event stack
       """
-      pressed = self.pg.key.get_pressed()
-      up_key = pressed[self.pg.K_UP]
-      down_key = pressed[self.pg.K_DOWN]
-      left_key = pressed[self.pg.K_LEFT]
-      right_key = pressed[self.pg.K_RIGHT]
-      w_key = pressed[self.pg.K_w]
-      s_key = pressed[self.pg.K_s] # these variables are kind of redundant
-                                    # since self.pg.K_w is pretty self-documenting
-      dirkeys = (up_key, down_key, left_key, right_key)
+      pressed = self.pg.key.get_pressed()     
+      # Change CREATOR parameters
+      if pressed[self.pg.K_UP]:     self.creator.update_vel(1,0.05)
+      if pressed[self.pg.K_DOWN]:   self.creator.update_vel(1,-0.05)
+      if pressed[self.pg.K_LEFT]:   self.creator.update_vel(0,-0.05)
+      if pressed[self.pg.K_RIGHT]:  self.creator.update_vel(0,0.05)
+      if pressed[self.pg.K_w]:      self.creator.update_mass(1)
+      if pressed[self.pg.K_s]:      self.creator.update_mass(1)
+      if pressed[self.pg.K_f]:      self.creator.reset_params()
       
-      vel = creator_settings[0]
-      veladd = creator_settings[1]
-      mass = creator_settings[2]
-      
-      
-      # CREATOR: increase/decrease initial velocity
-      if up_key: 
-         veladd[1]+=0.05 
-         veladd[1]%=20
-         vel[1] = round(10-veladd[1],2)
-         print(dirkeys)
-      if down_key: 
-         veladd[1]-=0.05 
-         veladd[1]%=20
-         vel[1] = round(10-veladd[1],2)
-         print(dirkeys)
-      if left_key: 
-         veladd[0]-=0.05 
-         veladd[0]%=20
-         vel[0] = round(10-veladd[0],2)
-         print(dirkeys)
-      if right_key: 
-         veladd[0]+=0.05 
-         veladd[0]%=20
-         vel[0] = round(10-veladd[0],2)
-         print(dirkeys)
-      
-      # CREATOR: increase/decrease mass
-      if w_key:
-         mass = (round(mass + 1)%99)+1
-         print('increasing mass to',mass)
-      if s_key:
-         if mass==1:
-            mass = round(mass - 2)%100 # for some reason this doesnt work when %99+1
-         mass = round(mass - 1)%100                              # it just doesnt change the mass value
-         print('reducing mass to',mass)
-         if mass==0:
-            mass = 1
-      if pressed[self.pg.K_e]:
-         self.mobile = not self.mobile
-         
-      # CREATOR: RESET creator settings
-      if pressed[self.pg.K_f]:
-         mass = 1
-         vel = [0,0]
-         
-      # PHYSICS SIM PAUSE
-      if pressed[self.pg.K_p]:
-         #this makes it obvious that key rate polling needs to be decreased,
-         # or "debouncing" or something
-         self.paused = True
-         print('paused')
-      if pressed[self.pg.K_o]:
-         self.paused = False
-         print('unpaused')
-         
+      # Manage Event Stack
       for event in pygame.event.get():
-         if event.type == pygame.QUIT:
-            done = True
-            self.pg.quit()
-            break
-         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_ESCAPE:
-            done = True
-            self.pg.quit()
-            break
-         
-         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_c:
-            self.gameSpace.bodies = []
-         if event.type == self.pg.KEYDOWN and event.key == self.pg.K_r:
-            self.gameSpace.reportBodies()
+         if event.type == pygame.QUIT:    self.pg.quit()
+         if event.type == self.pg.KEYDOWN:
+            if event.key == self.pg.K_ESCAPE:   self.pg.quit()
+            if event.key == self.pg.K_c:  self.gameSpace.clearBodies()
+            if event.key == self.pg.K_r:  self.gameSpace.reportBodies()
+            if event.key == self.pg.K_p:  self.toggle_pause()
+            if event.key == self.pg.K_e:  self.creator.toggle_mobile()
          # on Lclick, add a body to the space
          if event.type==pygame.MOUSEBUTTONDOWN: 
             if event.button==1:
                mouseloc = self.pg.mouse.get_pos()
                ## CALL CREATOR CLASS for createBody()
-               self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]],self.mobile)
+               self.gameSpace.addBody(self.creator.mass, self.creator.vel.copy(), [mouseloc[0],mouseloc[1]],self.creator.mobile)
                print('mouse clicked at',mouseloc)
-               
-      creator_settings = [vel, veladd, mass]
-      return creator_settings
 
+class creator(game):
+   def __init__(self,pg):
+      # pygame object (shouldn't need once set up right)
+      self.pg = pg
+      # physical constants
+      self.vel = [0,0]
+      self.veladd = [0,0]
+      self.mass = 1
+      self.mobile = True
+      # render data
+      self.textitems = () # creator settings text to render
+   
+   def update_vel(self,ind,incr):
+         self.veladd[ind]+=incr
+         self.veladd[ind]%=2
+         self.vel[ind] = round(1-self.veladd[ind],2)
+   def update_mass(self,incr):
+      self.mass = (round(self.mass + incr)%99)+1
+   def toggle_mobile(self):
+      self.mobile = not self.mobile
+   def reset_params(self):
+      self.mass = 1
+      self.vel = [0,0]
+   
+   def drawGenBar(self):
+      font = self.pg.font.Font(None,28)
+      text = font.render("Velocity: "+str(self.vel), True, (128,0,0))
+      text2 = font.render("Mass: "+str(self.mass),True,(128,0,0))
+      text3 = font.render("Mobile:"+str(self.mobile),True,(128,0,0))
+      self.textitems = (text,text2,text3)
+      
+   
 class space(game):
    """
    space represents the entire area of space being
@@ -207,10 +175,10 @@ class space(game):
       self.tick = 1         #sets time granularity to 1x the game loop tick
       self.pg = pg
       self.screen = pg.display.set_mode((self.length+50, self.height+50))
+      #game.__init__(self)
       self.gravconst = 100
-
       self.bodies = []
-
+      
    def addBody(self, mass, vel=[0,0], location=[0,0],mobile=True):
       """
       adds a body to the space
@@ -223,8 +191,10 @@ class space(game):
       calculate new positions for the next frame
       """
       for body in self.bodies:
-         body.newPosition(self.tick,self.length, self.height)
-
+         loc = body.newPosition(self.tick,self.length, self.height)
+         if (loc[0]**2+loc[1]**2)**0.5 > 20000:
+            self.bodies.remove(body)
+            print('removed body - too far away')
    def drawFrame(self):
       """
       draws the space for the next frame
@@ -255,29 +225,15 @@ class space(game):
                dely = otherbody.location[1] - body.location[1]
                r2 = (delx**2+dely**2)
                Ftot = self.gravconst*body.mass*otherbody.mass/r2
-               Fx = Ftot*(delx/(r2**0.5))
-               Fy = Ftot*(dely/(r2**0.5))
-               
-               #print(delx,dely)
-               # must determine sign because the information is lost 
-               # by the r^2 part of the gravity equation.
-               if delx<0:  signx = -1
-               else: signx = 1
-                  
-               if dely<0: signy = -1
-               else: signy = 1
 
-               # meant to be a divide by 0 catch but somethings very
-               # wrong here
-               if (dely<=0.1 and dely>0) or (dely>=-0.1 and dely<=0):
-                  dely = 0.1
-               if (delx<=0.1 and delx>0) or (delx>=-0.1 and delx<=0):
-                  delx = 0.1
                
-               #print(delx,dely)
-                  
-               F[0] += Fx#signx * self.gravconst * body.mass * otherbody.mass / delx**2
-               F[1] += Fy#signy * self.gravconst * body.mass * otherbody.mass / dely**2
+               # div by 0 catch since no collision
+               if (dely<=1 and dely>0) or (dely>=-1 and dely<=0):
+                  dely = 1
+               if (delx<=1 and delx>0) or (delx>=-1 and delx<=0):
+                  delx = 1
+               F[0] += Ftot*(delx/(r2**0.5))
+               F[1] += Ftot*(dely/(r2**0.5))
                accel[0] = F[0]/body.mass
                accel[1] = F[1]/body.mass
          v2[0] = v2[0] + accel[0]/tick
@@ -307,6 +263,8 @@ class space(game):
          print(body.location,"location")
          print(body.force, "force")
          #print(body.trail,"trail")
+   def clearBodies(self):
+      self.bodies = []
 
 class body(game):
    """
@@ -339,11 +297,11 @@ class body(game):
       # keep location as float, only round when rendering
       
       # put last location onto the trail
-      self.trail.append(self.location.copy())
-      if len(self.trail)>self.trail_max:
-         self.trail.pop(0)
       
-      if self.mobile:
+      if self.mobile: # only update position and trail if the point is mobile
+         self.trail.append(self.location.copy())
+         if len(self.trail)>self.trail_max:
+            self.trail.pop(0)
          # calculate the new position
          self.location[0] += self.vel[0]*2/tick 
          self.location[1] += self.vel[1]*2/tick
@@ -361,6 +319,7 @@ class body(game):
       forcevect[1] = 10*(self.force[1])
       self.forceend[0] = self.location[0]+forcevect[0]
       self.forceend[1] = self.location[1]+forcevect[1]
+      return self.location
       
       
    def draw(self,pg,screen): #fix parameter passing with proper object inheritance
