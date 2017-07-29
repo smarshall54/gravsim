@@ -5,7 +5,6 @@ import numpy as np
 # 1. Move all physics update logic to body() objects instead of space
 #     space object should only be used for counting bodies and holding data
 #        about space, like grid, color, size etc.
-# 2. add order of magnitude mass controls (a, d) for more interesting sims
 # 3. convert to vector math using numpy
 #     a. better algo for force solving! (quadratic now - could use
 #        a matrix operation for much faster results
@@ -33,7 +32,15 @@ import numpy as np
 #     d. reduce processor usage - probably related to gametick implementation.
 #           this small game should not use a full core unless there are many bodies.
 #           figure out why and stop it.
-
+#	  e. find a way to get better trails - maybe don't store and render them all every frame.
+# 			could just draw them to a separate surface and blit that every frame? etc
+#
+# 9. GAMEPLAY FEATURES
+# 	  a. MOUSE-DRAG LAUNCHING w. predictor trail
+#	  b. predictor trail does not know future movements - just predicts an accel path based on current positions of bodies
+#	  c. mass/density sliders
+# 	  d. collision
+#     e. better behavior for close bodies
 
 class game(object):
    """
@@ -56,7 +63,7 @@ class game(object):
    def toggle_pause(self):
       self.paused = not self.paused
       if self.paused:   print("Paused")
-      else: print("Unpaused")
+      else: 			print("Unpaused")
 
    def gameLoop(self):
       
@@ -211,7 +218,7 @@ class space(game):
       adds a body to the space
       """
       # gotta fix this function too, needs to get data from Creator
-      newBody = body(mass,5+mass//50,vel,location,mobile) # radius ~ mass//5
+      newBody = body(mass,int(5+mass//50),vel,location,mobile) # radius ~ mass//5
       self.bodies.append(newBody)
 
    def updatePositions(self,tick):
@@ -362,7 +369,6 @@ class body(game):
       # data back up. but it works.
       return drawdata
       
-
 def main():
    print('Starting gravSim')
    activeGame = game()
