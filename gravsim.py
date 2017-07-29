@@ -2,7 +2,7 @@ import pygame
 import numpy as np
 
 #  TODO:
-# 1. infinite plane instead of modulo space
+# X   1. infinite plane instead of modulo space
 # 2. functionalize game loop
 # 3. convert to vector math using numpy
 #     a. better algo for force solving! (quadratic now - could use
@@ -10,9 +10,9 @@ import numpy as np
 # 4. fix object inheritance
 # 5. UI around edge of screen
 # 6. DEBUG FEATURES:
-#     a. PAUSE (able to report during pause)
-#     b. toggle accel/vel vector drawing
-#     c. reset veladd/mass vectors to 0
+# X    a. PAUSE (able to report during pause)
+# P    b. toggle accel/vel vector drawing
+# X    c. reset veladd/mass vectors to 0
 #     d. debug screen overlay
 #           - cycle thru bodies and show instantaneous vel/accel/pos of each
 #           - display game tick number %10000 so user can see how much time since last pause
@@ -44,6 +44,7 @@ class game(object):
       self.winsizey = 720
       self.pg.init()
       self.paused = False
+      self.mobile = True # CREATOR param
 
    def gameLoop(self):
       running = True
@@ -77,9 +78,10 @@ class game(object):
             font = self.pg.font.Font(None,32)
             text = font.render("Velocity: "+str(vel), True, (128,0,0))
             text2 = font.render("Mass: "+str(mass),True,(128,0,0))
+            text3 = font.render("Mobile:"+str(self.mobile),True,(128,0,0))
             self.gameSpace.screen.blit(text,(10,10))
             self.gameSpace.screen.blit(text2,(10+text.get_width(),10))
-
+            self.gameSpace.screen.blit(text3,(10+text.get_width()+10+text2.get_width(),10))
             # flip the buffer
             self.pg.display.flip()
             
@@ -147,6 +149,8 @@ class game(object):
          print('reducing mass to',mass)
          if mass==0:
             mass = 1
+      if pressed[self.pg.K_e]:
+         self.mobile = not self.mobile
          
       # CREATOR: RESET creator settings
       if pressed[self.pg.K_f]:
@@ -157,11 +161,11 @@ class game(object):
       if pressed[self.pg.K_p]:
          #this makes it obvious that key rate polling needs to be decreased,
          # or "debouncing" or something
-         self.paused = not self.paused
-         if self.paused:
-            print('paused')
-         else:
-            print('unpaused')
+         self.paused = True
+         print('paused')
+      if pressed[self.pg.K_o]:
+         self.paused = False
+         print('unpaused')
          
       for event in pygame.event.get():
          if event.type == pygame.QUIT:
@@ -181,7 +185,9 @@ class game(object):
          if event.type==pygame.MOUSEBUTTONDOWN: 
             if event.button==1:
                mouseloc = self.pg.mouse.get_pos()
-               self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]])
+               ## CALL CREATOR CLASS for createBody()
+               self.gameSpace.addBody(mass, vel.copy(), [mouseloc[0],mouseloc[1]],self.mobile)
+               print('mouse clicked at',mouseloc)
                
       creator_settings = [vel, veladd, mass]
       return creator_settings
@@ -201,15 +207,15 @@ class space(game):
       self.tick = 1         #sets time granularity to 1x the game loop tick
       self.pg = pg
       self.screen = pg.display.set_mode((self.length+50, self.height+50))
-      self.gravconst = 0.01
+      self.gravconst = 100
 
       self.bodies = []
 
-   def addBody(self, mass, vel=[0,0], location=[0,0]):
+   def addBody(self, mass, vel=[0,0], location=[0,0],mobile=True):
       """
       adds a body to the space
       """
-      newBody = body(mass,5+mass//5,vel,location) # radius ~ mass//5
+      newBody = body(mass,5+mass//5,vel,location,mobile) # radius ~ mass//5
       self.bodies.append(newBody)
 
    def updatePositions(self,tick):
@@ -247,26 +253,33 @@ class space(game):
             if otherbody!=body:
                delx = otherbody.location[0] - body.location[0]
                dely = otherbody.location[1] - body.location[1]
+               r2 = (delx**2+dely**2)
+               Ftot = self.gravconst*body.mass*otherbody.mass/r2
+               Fx = Ftot*(delx/(r2**0.5))
+               Fy = Ftot*(dely/(r2**0.5))
                
+               #print(delx,dely)
                # must determine sign because the information is lost 
                # by the r^2 part of the gravity equation.
-               if delx<0:  signx = 1
-               else: signx = -1
+               if delx<0:  signx = -1
+               else: signx = 1
                   
-               if dely<0: signy = 1
-               else: signy = -1
+               if dely<0: signy = -1
+               else: signy = 1
 
                # meant to be a divide by 0 catch but somethings very
                # wrong here
-               if (dely**2<=0.01) or (dely**2>=-0.01):
+               if (dely<=0.1 and dely>0) or (dely>=-0.1 and dely<=0):
                   dely = 0.1
-               if (delx**2<=0.01) or (delx**2>=-0.01):
+               if (delx<=0.1 and delx>0) or (delx>=-0.1 and delx<=0):
                   delx = 0.1
+               
+               #print(delx,dely)
                   
-               F[0] = signx * self.gravconst * body.mass * otherbody.mass / delx**2
-               F[1] = signy * self.gravconst * body.mass * otherbody.mass / dely**2
-               accel[0] -= F[0]/body.mass
-               accel[1] -= F[1]/body.mass
+               F[0] += Fx#signx * self.gravconst * body.mass * otherbody.mass / delx**2
+               F[1] += Fy#signy * self.gravconst * body.mass * otherbody.mass / dely**2
+               accel[0] = F[0]/body.mass
+               accel[1] = F[1]/body.mass
          v2[0] = v2[0] + accel[0]/tick
          v2[1] = v2[1] + accel[1]/tick
          body.set_vel(v2)
@@ -292,7 +305,8 @@ class space(game):
       for body in self.bodies:
          print(body.vel,"velocity")
          print(body.location,"location")
-         print(body.trail,"trail")
+         print(body.force, "force")
+         #print(body.trail,"trail")
 
 class body(game):
    """
@@ -300,7 +314,7 @@ class body(game):
    as a point mass. a body can have scalar properties:   mass   radius
    and vector properties:  velocity   location
    """
-   def __init__(self, mass=1, rad=5, vel=[0,0], location=[0,0]):
+   def __init__(self, mass=1, rad=5, vel=[0,0], location=[0,0], mobile=True):
       self.mass = mass
       self.rad = rad
       self.vel = vel
@@ -310,6 +324,7 @@ class body(game):
       self.velend = location.copy()
       self.force = [0,0] #used to store force acting on the object in current tck
       self.forceend = location.copy()
+      self.mobile = mobile # is the mass fixed or mobile?
       
    def get_vel(self):
       return self.vel
@@ -328,9 +343,10 @@ class body(game):
       if len(self.trail)>self.trail_max:
          self.trail.pop(0)
       
-      # calculate the new position
-      self.location[0] += self.vel[0]*2/tick 
-      self.location[1] += self.vel[1]*2/tick
+      if self.mobile:
+         # calculate the new position
+         self.location[0] += self.vel[0]*2/tick 
+         self.location[1] += self.vel[1]*2/tick
       
       # calculate the velocity vector for display
       velvect = [0,0]
@@ -341,8 +357,8 @@ class body(game):
       # should really make these force vectors instead, but the data for
       # force/accel isn't stored in the body object...
       forcevect = [0,0]
-      forcevect[0] = 30*(0-self.force[0])
-      forcevect[1] = 30*(0-self.force[1])
+      forcevect[0] = 10*(self.force[0])
+      forcevect[1] = 10*(self.force[1])
       self.forceend[0] = self.location[0]+forcevect[0]
       self.forceend[1] = self.location[1]+forcevect[1]
       
