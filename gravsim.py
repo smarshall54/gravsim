@@ -61,7 +61,7 @@ class game(object):
    """
    def __init__(self):
       #main game window parameters
-      self.ftick = 600
+      self.ftick = 6000
       self.winsizex = 1280
       self.winsizey = 720
       self.paused = False
@@ -191,7 +191,7 @@ class game(object):
                initvel = [0,0]
                initvel[0] = (self.mousedown[0] - self.mouseup[0])/100
                initvel[1] = (self.mousedown[1] - self.mouseup[1])/100
-               b = body(self.creator.mass, int(5+self.creator.mass//50), initvel.copy(), [self.mousedown[0],self.mousedown[1]])
+               b = body(self.creator.mass, int(5+self.creator.mass//50), initvel.copy(), [self.mousedown[0],self.mousedown[1]], self.creator.mobile)
                self.gameSpace.body_creation_buffer = b
          if event.type==pygame.MOUSEBUTTONUP:
             self.gameSpace.dumpBuffer()
@@ -332,7 +332,7 @@ class space(game):
 
    def dumpBuffer(self):
       self.body_creation_buffer.launchvect = [0,0]
-      self.body_creation_buffer.launchend = self.body_creation_buffer.location.copy()
+      self.body_creation_buffer.launchend = [0,0]
       self.bodies.append(self.body_creation_buffer)
       self.body_creation_buffer = False
 
@@ -364,7 +364,8 @@ class space(game):
       # F = gm1m2/r2
       # v = a*dt
       for body in self.bodies:
-         eps=10
+         eps=0.1 #can reduce epsilon for more accurate sim, but requires
+                  # exponentially more ticks
          Force = [0,0]
          body.set_force(Force) # reset force for the current tick
          for otherbody in self.bodies:
@@ -468,14 +469,14 @@ class body(game):
       self.updateTrail()
       # calculate the velocity and force vectors for display
       velvect = [0,0]
-      velvect[0] = 10*(self.location[0] - self.trail[-2][0])
-      velvect[1] = 10*(self.location[1] - self.trail[-2][1])
+      velvect[0] = 50*(self.location[0] - self.trail[-2][0])
+      velvect[1] = 50*(self.location[1] - self.trail[-2][1])
       self.velend[0] = self.location[0]+velvect[0]
       self.velend[1] = self.location[1]+velvect[1]
 
       forcevect = [0,0]
-      forcevect[0] = 10*(self.force[0])
-      forcevect[1] = 10*(self.force[1])
+      forcevect[0] = 1*(self.force[0])
+      forcevect[1] = 1*(self.force[1])
       self.forceend[0] = self.location[0]+forcevect[0]
       self.forceend[1] = self.location[1]+forcevect[1]
 
@@ -492,8 +493,9 @@ class body(game):
       pass
 
    def calcLaunchVect(self):
-      self.launchend[0] = self.location[0]+pygame.mouse.get_pos()[0]
-      self.launchend[1] = self.location[1]+pygame.mouse.get_pos()[1]
+      self.launchvect = self.location
+      self.launchend[0] = pygame.mouse.get_pos()[0]
+      self.launchend[1] = pygame.mouse.get_pos()[1]
       pass
    ##############################################
    ##############################################
@@ -510,7 +512,7 @@ class body(game):
       trailcolor = (64,64,64)
       velvectcolor = (255,0,0)
       forcevectcolor = (0,0,255)
-      launchvectcolor = (0,64,0)
+      launchvectcolor = (0,128,0)
       
       #calculate vectors to draw
       self.calcDispVectors()
@@ -522,7 +524,7 @@ class body(game):
                   'lines':(trailcolor,False,self.trail),
                   'line0':(velvectcolor,self.location,self.velend),
                   'line1':(forcevectcolor,self.location,self.forceend),
-                  'line2':(launchvectcolor,self.location,self.launchend)}
+                  'line2':(launchvectcolor,self.launchvect,self.launchend)}
       return drawdata
 
 ##############################################################################
