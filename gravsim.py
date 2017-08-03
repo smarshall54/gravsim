@@ -42,6 +42,7 @@ import numpy as np
 #     d. collision
 #     e. better behavior for close bodies (shootoff bug)
 #     f. undo function (remove last body from list of bodies)
+#     g. SAVE feature to allow user to save a cool configuration
 #
 #  SCOPE CREEP
 #     - sandbox mode and puzzle mode
@@ -60,7 +61,7 @@ class game(object):
    """
    def __init__(self):
       #main game window parameters
-      self.ftick = 60
+      self.ftick = 600
       self.winsizex = 1280
       self.winsizey = 720
       self.paused = False
@@ -327,6 +328,7 @@ class space(game):
       # F = gm1m2/r2
       # v = a*dt
       for body in self.bodies:
+         eps=10
          Force = [0,0]
          body.set_force(Force) # reset force for the current tick
          for otherbody in self.bodies:
@@ -334,12 +336,12 @@ class space(game):
                delx = otherbody.location[0] - body.location[0]
                dely = otherbody.location[1] - body.location[1]
                r2 = (delx**2+dely**2)
-               Ftot = self.gravconst*body.mass*otherbody.mass/r2
+               Ftot = self.gravconst*body.mass*otherbody.mass*r2**0.5/(r2+eps**2)**(3/2)
                # div by 0 catch since no collision
-               if (dely<=1 and dely>0):   dely = 1
-               if (dely>=-1 and dely<=0): dely = -1
-               if (delx<=1 and delx>0):   delx = 1
-               if (delx>=-1 and delx<=0): delx = -1
+               # if (dely<=1 and dely>0):   dely = 1
+               # if (dely>=-1 and dely<=0): dely = -1
+               # if (delx<=1 and delx>0):   delx = 1
+               # if (delx>=-1 and delx<=0): delx = -1
                Force[0] = Ftot*(delx/(r2**0.5))
                Force[1] = Ftot*(dely/(r2**0.5))
                body.addForce(Force)
@@ -383,7 +385,7 @@ class body(game):
       self.vel = vel
       self.location = location
       self.trail = [location.copy(),location.copy()]
-      self.trail_max = 100
+      self.trail_max = 1000
       self.velend = location.copy()
       self.force = [0,0] #used to store force acting on the object in current tck
       self.forceend = location.copy()
@@ -480,7 +482,28 @@ class body(game):
 
 ##############################################################################
 ##############################################################################
-def main():
+def main(): # consider main() like unit test code
+            # could write a generalized gameloop class
+            #  gameloop(tick, gameData, updateMethod, renderMethod,
+            #           handleInputsMethod)
+            # basically a generalized format for real-time physics-based
+            # 2d games
+            # Game(object)
+            #     System(Game) = data about the system its running on;
+            #                    in my simple example this is just window size
+            #                    but in a full program it might have to know
+            #                    about system commands for file saving etc.
+            #     States(Game) = data listing all available Game States
+            #              e.g. Main Menu, Game, Credits
+            #     Panel(Game) = data about screen layout in a given Game State
+            #     Inputs(Game) = class defining input relationships from
+            #                    events to methods on the game
+            #     Render(Game) = render method to grab data about the game
+            #                    relevant methods and plot it
+            #        rest of the game would be a custom class (in my case, 
+            #        "space" is the hook for the main gameplay part)
+            # build a basic 3d engine to take mouse input and translate
+            #  into FPS vision movement.  
    print('Starting gravSim')
    activeGame = game()
    activeGame.gameLoop()
