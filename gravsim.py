@@ -78,6 +78,8 @@ class game(object):
       # set up game objects
       self.gameSpace = space(self.pg,self.screen,self.simWidth,self.simHeight)
       self.creator = creator(self.pg)
+      self.mousedown = [0,0]
+      self.mouseup = [0,0]
 
    def toggle_pause(self):
       self.paused = not self.paused
@@ -174,6 +176,7 @@ class game(object):
             if event.key == self.pg.K_ESCAPE:   self.pg.quit()
             if event.key == self.pg.K_c:  self.gameSpace.clearBodies()
             if event.key == self.pg.K_r:  self.gameSpace.reportBodies()
+            if event.key == self.pg.K_q:  self.gameSpace.removeBody()
             if event.key == self.pg.K_p:  self.toggle_pause()
             if event.key == self.pg.K_e:  self.creator.toggle_mobile()
             if event.key == self.pg.K_a:  self.creator.update_order(-1)
@@ -183,8 +186,24 @@ class game(object):
             if event.button==1:
                mouseloc = self.pg.mouse.get_pos()
                ## CALL CREATOR CLASS for createBody()
-               self.gameSpace.addBody(self.creator.mass, self.creator.vel.copy(), [mouseloc[0],mouseloc[1]],self.creator.mobile)
-               print('mouse clicked at',mouseloc)
+               #self.gameSpace.addBody(self.creator.mass, self.creator.vel.copy(), [mouseloc[0],mouseloc[1]],self.creator.mobile)
+               self.mousedown = mouseloc
+               initvel = [0,0]
+               initvel[0] = (self.mousedown[0] - self.mouseup[0])/100
+               initvel[1] = (self.mousedown[1] - self.mouseup[1])/100
+               b = body(self.creator.mass, int(5+self.creator.mass//50), initvel.copy(), [self.mousedown[0],self.mousedown[1]])
+               self.gameSpace.body_creation_buffer = b
+         if event.type==pygame.MOUSEBUTTONUP:
+            self.gameSpace.dumpBuffer()
+            #self.gameSpace.addBody(self.creator.mass, initvel.copy(), [self.mousedown[0],self.mousedown[1]])
+      if pygame.mouse.get_pressed()[0]:# and event.button==1:
+         self.mouseup = self.pg.mouse.get_pos()
+         initvel = [0,0]
+         initvel[0] = (self.mousedown[0] - self.mouseup[0])/100
+         initvel[1] = (self.mousedown[1] - self.mouseup[1])/100
+         #b = body(self.creator.mass, int(5+self.creator.mass//50), initvel.copy(), [self.mousedown[0],self.mousedown[1]])
+         self.gameSpace.body_creation_buffer.vel = initvel.copy()
+         self.gameSpace.body_creation_buffer.calcLaunchVect()
 ##############################################################################
 ##############################################################################
 class creator(game):
@@ -295,6 +314,7 @@ class space(game):
       self.height = height    # valid render area
       self.gravconst = 100
       self.bodies = []
+      self.body_creation_buffer = False
       
    def addBody(self, mass, vel=[0,0], location=[0,0],mobile=True):
       """
@@ -303,6 +323,18 @@ class space(game):
       # gotta fix this function too, needs to get data from Creator
       newBody = body(mass,int(5+mass//50),vel,location,mobile) # radius ~ mass//5
       self.bodies.append(newBody)
+
+   def removeBody(self):
+      '''
+      removes the most recently created body
+      '''
+      self.bodies.pop()
+
+   def dumpBuffer(self):
+      self.body_creation_buffer.launchvect = [0,0]
+      self.body_creation_buffer.launchend = self.body_creation_buffer.location.copy()
+      self.bodies.append(self.body_creation_buffer)
+      self.body_creation_buffer = False
 
    def updatePositions(self,tick):
       """
@@ -320,6 +352,10 @@ class space(game):
       drawlist = []
       for body in self.bodies:
          drawlist.append(body.getDrawData())   # could definitely fix all this
+      
+      if self.body_creation_buffer!=False:
+         drawlist.append(self.body_creation_buffer.getDrawData())
+         print('drawing buffered body')
       return drawlist
    ##############################################
    ##############################################
@@ -390,6 +426,8 @@ class body(game):
       self.force = [0,0] #used to store force acting on the object in current tck
       self.forceend = location.copy()
       self.mobile = mobile # is the mass fixed or mobile?
+      self.launchvect = [0,0]
+      self.launchend = self.location.copy()
       
    def get_vel(self):
       return self.vel
@@ -452,6 +490,11 @@ class body(game):
          a list of coordinates.
       """
       pass
+
+   def calcLaunchVect(self):
+      self.launchend[0] = self.location[0]+pygame.mouse.get_pos()[0]
+      self.launchend[1] = self.location[1]+pygame.mouse.get_pos()[1]
+      pass
    ##############################################
    ##############################################
    def getDrawData(self):
@@ -467,6 +510,7 @@ class body(game):
       trailcolor = (64,64,64)
       velvectcolor = (255,0,0)
       forcevectcolor = (0,0,255)
+      launchvectcolor = (0,64,0)
       
       #calculate vectors to draw
       self.calcDispVectors()
@@ -477,7 +521,8 @@ class body(game):
       drawdata = {'circle':(bodycolor,rendCoords,self.rad),
                   'lines':(trailcolor,False,self.trail),
                   'line0':(velvectcolor,self.location,self.velend),
-                  'line1':(forcevectcolor,self.location,self.forceend)}
+                  'line1':(forcevectcolor,self.location,self.forceend),
+                  'line2':(launchvectcolor,self.location,self.launchend)}
       return drawdata
 
 ##############################################################################
